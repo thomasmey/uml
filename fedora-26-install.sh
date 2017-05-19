@@ -19,5 +19,5 @@ if [ ! -f "$DISK" ]; then
    truncate -s 2G $DISK
 fi
 
-$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD root=live:CDLABEL=Fedora-WS-Live-26_A-1-7 rd.live.image
+$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD root=live:CDLABEL=Fedora-WS-Live-26_A-1-7 rd.live.image plymouth.enable=0 debug
  
