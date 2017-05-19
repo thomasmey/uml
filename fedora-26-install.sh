@@ -16,9 +16,13 @@ if [ ! -f "$INITRD" ]; then
 fi
 
 if [ ! -f "$DISK" ]; then
-   truncate -s 2G $DISK
+   truncate -s 5G $DISK
 fi
 
-$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD inst.stage2=hd:LABEL=Fedora-S-dvd-x86_64-26 plymouth.enable=0 eth0=tuntap,,,192.168.5.1 ip=192.168.5.2::192.168.0.1:255.255.255.0:fry:eth0:none nameserver=192.168.0.1
+# firewall-cmd --zone=home --add-interface=tap0
+# firewall-cmd --zone=external --change-interface=wlan0
+# sysctl -w vm.max_map_count=265535
+
+$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD inst.stage2=hd:LABEL=Fedora-S-dvd-x86_64-26 plymouth.enable=0 eth0=tuntap,,,192.168.5.1 ip=192.168.5.2::192.168.5.1:255.255.255.0:fry:eth0:none nameserver=192.168.0.1
 
 
