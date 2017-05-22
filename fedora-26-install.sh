@@ -1,15 +1,19 @@
 #!/bin/sh
-LINUX_DIR=/home/thomas/source/linux-um
-ISO_FILE=Fedora-Server-netinst-x86_64-26-Alpha-1.7.iso
-INITRD=fedora26-initrd.cpio.xz
-DISK=Fedora26.img
+
+# x86_64 or i386
+SUBARCH=x86_64
+
+LINUX_DIR=/home/thomas/git/linux
+ISO_FILE=Fedora-Server-netinst-$SUBARCH-26-Alpha-1.7.iso
+INITRD=fedora26-$SUBARCH-initrd.cpio.xz
+DISK=fedora26-$SUBARCH.img
 
 if [ ! -f "$ISO_FILE" ]; then
-   curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/test/26_Alpha/Server/x86_64/iso/Fedora-Server-netinst-x86_64-26-Alpha-1.7.iso" 
+   curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/test/26_Alpha/Server/$SUBARCH/iso/$ISO_FILE" 
 fi
 
-cp config $LINUX_DIR/.config
-make ARCH=um -C $LINUX_DIR/ -j$(nproc)
+cp config-$SUBARCH $LINUX_DIR/.config
+make ARCH=um -C $LINUX_DIR/ -j$(nproc) clean all
 
 if [ ! -f "$INITRD" ]; then
    iso-read -i $ISO_FILE -e isolinux/initrd.img --output-file $INITRD
@@ -23,6 +27,5 @@ fi
 # firewall-cmd --zone=external --change-interface=wlan0
 # sysctl -w vm.max_map_count=265535
 
-$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD inst.stage2=hd:LABEL=Fedora-S-dvd-x86_64-26 plymouth.enable=0 eth0=tuntap,,,192.168.5.1 ip=192.168.5.2::192.168.5.1:255.255.255.0:fry:eth0:none nameserver=192.168.0.1
-
+$LINUX_DIR/linux mem=1280m ubd0=$DISK ubd1=$ISO_FILE umid=fedora26 initrd=$INITRD inst.stage2=hd:LABEL=Fedora-S-dvd-$SUBARCH-26 plymouth.enable=0 eth0=tuntap,,,192.168.5.1 ip=192.168.5.2::192.168.5.1:255.255.255.0:fry:eth0:none nameserver=192.168.0.1
 
