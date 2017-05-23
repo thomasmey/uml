@@ -13,7 +13,7 @@ if [ ! -f "$ISO_FILE" ]; then
 fi
 
 cp config-$SUBARCH $LINUX_DIR/.config
-make ARCH=um -C $LINUX_DIR/ -j$(nproc) clean all
+make ARCH=um -C $LINUX_DIR/ -j$(nproc)
 
 if [ ! -f "$INITRD" ]; then
    iso-read -i $ISO_FILE -e isolinux/initrd.img --output-file $INITRD
