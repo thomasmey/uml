@@ -6,7 +6,7 @@ SUBARCH=x86_64
 LINUX_DIR=/home/thomas/git/linux
 ISO_FILE=Fedora-Server-netinst-$SUBARCH-26-Alpha-1.7.iso
 INITRD=fedora26-$SUBARCH-initrd.cpio.xz
-DISK=fedora26-$SUBARCH.img
+DISK=fedora26-$SUBARCH-root.img
 
 if [ ! -f "$ISO_FILE" ]; then
    curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/test/26_Alpha/Server/$SUBARCH/iso/$ISO_FILE" 
