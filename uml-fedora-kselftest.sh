@@ -9,7 +9,7 @@ LINUX_DIR=~/git/linux
 RAW_FILE=Fedora-Cloud-Base-26-1.5.x86_64.raw
 CLOUD_INIT_FILE=Fedora-Cloud-Base-Init.iso
 KSELFTEST_FILE=Fedora-Cloud-Base-kselftests.img
-
+MODULES_FILE=Fedora-Cloud-Base-modules.img
 
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
@@ -71,8 +71,15 @@ sed -i 's/CONFIG_UML_NET_VDE=y/CONFIG_UML_NET_VDE=n/' $LINUX_DIR/.config
 sed -i 's/CONFIG_UML_NET_PCAP=y/CONFIG_UML_NET_PCAP=n/' $LINUX_DIR/.config
 # link dynamic
 sed -i 's/CONFIG_STATIC_LINK=y/CONFIG_STATIC_LINK=n/' $LINUX_DIR/.config
+# either GCOV or KCOV,KCOV_KERNEL, both doesn't seem to work
+sed -i 's/CONFIG_GCOV_KERNEL=y/CONFIG_GCOV_KERNEL=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
+# this fails
+sed -i 's/CONFIG_OF_UNITTEST=y/CONFIG_OF_UNITTEST=n/' $LINUX_DIR/.config
 
 # build kernel
+# target make clean all fails :-(
+make -C $LINUX_DIR -j$(nproc) clean 
 make -C $LINUX_DIR -j$(nproc) all
 
 # build and install kselftests
@@ -82,5 +89,11 @@ make -C $LINUX_DIR/tools/testing/selftests all install
 mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
 rm -R $INSTALL_PATH
 
-$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE root=/dev/ubda1 ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1
+# build and install modules 
+export INSTALL_MOD_PATH=`mktemp -d`
+make -C $LINUX_DIR modules_install 
+mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g 
+rm -R $INSTALL_MOD_PATH
+
+$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE root=/dev/ubda1 ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1
 
