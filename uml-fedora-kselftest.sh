@@ -10,8 +10,7 @@ RAW_FILE=Fedora-Cloud-Base-26-1.5.x86_64.raw
 CLOUD_INIT_FILE=Fedora-Cloud-Base-Init.iso
 KSELFTEST_FILE=Fedora-Cloud-Base-kselftests.img
 MODULES_FILE=Fedora-Cloud-Base-modules.img
-#INITRD_DIR=`mktemp -d`
-INITRD_DIR=`pwd`/initrd
+INITRD_DIR=`mktemp -d`
 
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
@@ -33,7 +32,7 @@ chpasswd: { expire: False }
 ssh_pwauth: True
 
 mounts:
- - [ /dev/ubdc, /opt ]
+ - [ /dev/ubdc, /opt, ext4 ]
 
 write_files:
  - content: |
@@ -115,25 +114,76 @@ echo "CONFIG_INITRAMFS_ROOT_GID=-1" >> $LINUX_DIR/.config
 # ?? don't know
 echo "CONFIG_BIG_KEYS=y" >> $LINUX_DIR/.config
 
+# mount --bind modules over root
+cc -o $INITRD_DIR/init -static -xc - << EOF
+#define _GNU_SOURCE         /* See feature_test_macros(7) */
+#include <unistd.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+#include <sys/mount.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+
+static void setup_stdio(void) {
+  int confd = open("/dev/console", O_RDWR); 
+  dup2(confd, 0);
+  dup2(confd, 1);
+  dup2(confd, 2);
+  close(confd);
+}
+
+int main(void) {
+
+  char* newroot = "/sysroot";
+  char* modules = "/modules";
+
+  setup_stdio();
+  int rc = mount("/dev/ubda1", newroot, "ext4", 0, "");
+  printf("Mounted sysroot with %i\n", rc);
+  chdir(newroot);
+
+  rc = mount("/dev/ubdd", modules, "ext4", 0, "");
+  printf("Mounted modules with %i\n", rc);
+  rc = mount("/modules/lib/modules/", "/sysroot/lib/modules", NULL, MS_BIND, NULL);
+  printf("Bound modules with %i\n", rc);
+  if(rc == -1) {
+    perror("Failed to bind mount modules!");
+  }
+
+  rc = mount(newroot, "/", NULL, MS_MOVE, NULL);
+  printf("Moved sysroot with %i\n", rc);
+
+  chroot(".");
+  setup_stdio();
+
+  char* argv[] = { "/sbin/init", NULL };
+  char* envp[] = { NULL };
+  rc = execv(argv[0], argv);
+  printf("Execc returned %i\n", rc);
+}
+EOF
+
 # create initrd that mount --bind /dev/ubdd over /dev/ubda1
 cat > $INITRD_DIR/files << EOF
 dir /dev         0755 0 0
 nod /dev/console 0600 0 0 c 5 1
 nod /dev/ubda1   0600 0 0 b 98 1
 nod /dev/ubdd    0600 0 0 b 98 48 
-dir /root        0700 0 0
 dir /sysroot     0755 0 0
 dir /modules     0755 0 0
-dir /sbin        0755 0 0
-file /sbin/init $INITRD_DIR/init 0755 0 0
+file /init $INITRD_DIR/init 0755 0 0
 EOF
-#rm -R $INITRD_DIR
-#file /sbin/init $INITRD_DIR/init 0755 0 0
 
 # build kernel
 # combined targets "clean all" fail :-(
 #make -C $LINUX_DIR -j$(nproc) clean 
 make -C $LINUX_DIR -j$(nproc) all
+
+# clean up INITRD_DIR after build
+rm -R $INITRD_DIR
 
 # build and install kselftests
 # used by kselftest install
@@ -149,5 +199,5 @@ mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g
 rm -R $INSTALL_MOD_PATH
 
 #root=/dev/ubda1 
-$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 rootfstype=ramfs
+$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
 
