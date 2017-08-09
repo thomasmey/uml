@@ -25,7 +25,7 @@ fi
 if [ ! -f "$CLOUD_INIT_FILE" ]; then
   TEMP_DIR=`mktemp -d`
   { echo instance-id: iid-local01; echo local-hostname: cloudimg; } > $TEMP_DIR/meta-data
-  cat > $TEMPDIR/user-data << EOF
+  cat > $TEMP_DIR/user-data << EOF
 #cloud-config
 password: passw0rd
 chpasswd: { expire: False }
@@ -120,6 +120,7 @@ cc -o $INITRD_DIR/init -static -xc - << EOF
 #include <unistd.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #include <sys/mount.h>
 #include <sys/types.h>
@@ -140,27 +141,34 @@ int main(void) {
   char* newroot = "/sysroot";
   char* modules = "/modules";
 
+  // establish stdin,stdout,stderr
   setup_stdio();
+
+  // mount root
   int rc = mount("/dev/ubda1", newroot, "ext4", 0, "");
   printf("Mounted sysroot with %i\n", rc);
   chdir(newroot);
 
+  // mount bind modules
   rc = mount("/dev/ubdd", modules, "ext4", 0, "");
   printf("Mounted modules with %i\n", rc);
   rc = mount("/modules/lib/modules/", "/sysroot/lib/modules", NULL, MS_BIND, NULL);
   printf("Bound modules with %i\n", rc);
-  if(rc == -1) {
-    perror("Failed to bind mount modules!");
-  }
 
+  // move to new root fs
   rc = mount(newroot, "/", NULL, MS_MOVE, NULL);
   printf("Moved sysroot with %i\n", rc);
 
   chroot(".");
+  // establish stdin,stdout,stderr
   setup_stdio();
 
+  // load isofs
+  system("/sbin/modprobe binfmt_script");
+  system("/sbin/modprobe isofs");
+
+  // call original init
   char* argv[] = { "/sbin/init", NULL };
-  char* envp[] = { NULL };
   rc = execv(argv[0], argv);
   printf("Execc returned %i\n", rc);
 }
