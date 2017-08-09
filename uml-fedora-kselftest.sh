@@ -59,7 +59,7 @@ runcmd:
 EOF
 
   ## create a disk to attach with some user-data and meta-data
-  genisoimage -output $CLOUD_INIT_FILE -volid cidata -joliet -rock $TEMP_DIR/user-data $TEMP_DIR/meta-data
+  genisoimage -output $CLOUD_INIT_FILE -volid cidata -joliet -rock $TEMP_DIR
   rm -R $TEMP_DIR
 fi
 
