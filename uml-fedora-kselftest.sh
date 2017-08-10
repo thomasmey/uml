@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 
 export ARCH=um
 # x86_64 or i386
@@ -11,6 +11,7 @@ CLOUD_INIT_FILE=Fedora-Cloud-Base-Init.iso
 KSELFTEST_FILE=Fedora-Cloud-Base-kselftests.img
 MODULES_FILE=Fedora-Cloud-Base-modules.img
 INITRD_DIR=`mktemp -d`
+RESULT_FILE=Fedora-Cloud-Base-Result.img
 
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
@@ -37,12 +38,14 @@ mounts:
 write_files:
  - content: |
      [Unit]
-     Description=/etc/rc.d/rc.local Compatibility
+     Description=kselftests
      [Install]
      WantedBy=multi-user.target
      [Service]
      Type=simple
      ExecStart=/bin/sh /opt/run_kselftest.sh
+     ExecPostStop=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
+     ExecPostStop=/usr/bin/systemctl halt
      TimeoutSec=0
      RemainAfterExit=yes
      GuessMainPID=no
@@ -64,10 +67,10 @@ EOF
 fi
 
 # crete config
-make -C $LINUX_DIR -j$(nproc) allmodconfig
+make -C $LINUX_DIR allmodconfig
 
 # be less verbose
-sed -i 's/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=y/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=n/' $LINUX_DIR/.config
+#sed -i 's/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=y/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=n/' $LINUX_DIR/.config
 
 # Fedora doesn't have this package available
 sed -i 's/CONFIG_UML_NET_VDE=y/CONFIG_UML_NET_VDE=n/' $LINUX_DIR/.config
@@ -86,6 +89,8 @@ sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
 #ERROR: "__gcov_init" [arch/um/drivers/harddog.ko] undefined!
 #ERROR: "__gcov_exit" [arch/um/drivers/harddog.ko] undefined!
 sed -i 's/CONFIG_GCOV=y/CONFIG_GCOV=n/' $LINUX_DIR/.config
+# dont break the build here
+#export KBUILD_MODPOST_WARN=y
 
 # this fails
 sed -i 's/CONFIG_OF_UNITTEST=y/CONFIG_OF_UNITTEST=n/' $LINUX_DIR/.config
@@ -95,13 +100,13 @@ sed -i 's/CONFIG_KERNEL_STACK_ORDER=./CONFIG_KERNEL_STACK_ORDER=3/' $LINUX_DIR/.
 
 # we need ext4
 sed -i 's/CONFIG_EXT4_FS=./CONFIG_EXT4_FS=y/' $LINUX_DIR/.config
-#sed -i 's/CONFIG_ISO9660_FS=./CONFIG_ISO9660_FS=y/' $LINUX_DIR/.config
 
 # don't sign modules
 sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/' $LINUX_DIR/.config
 
+# patch send upstream
 # this modules has unsatisfed dependencies:
-sed -i 's/CONFIG_IMG_ASCII_LCD=m/CONFIG_IMG_ASCII_LCD=n/' $LINUX_DIR/.config
+#sed -i 's/CONFIG_IMG_ASCII_LCD=m/CONFIG_IMG_ASCII_LCD=n/' $LINUX_DIR/.config
 
 # disable RODATA for now 
 sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $LINUX_DIR/.config
@@ -110,6 +115,9 @@ sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $LINUX_DIR/.co
 sed -i "s@CONFIG_INITRAMFS_SOURCE=\"\"@CONFIG_INITRAMFS_SOURCE=\"$INITRD_DIR/files\"@" $LINUX_DIR/.config
 echo "CONFIG_INITRAMFS_ROOT_UID=-1" >> $LINUX_DIR/.config
 echo "CONFIG_INITRAMFS_ROOT_GID=-1" >> $LINUX_DIR/.config
+
+# increase kernel message log buffer size
+sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=18/" $LINUX_DIR/.config
 
 # ?? don't know
 echo "CONFIG_BIG_KEYS=y" >> $LINUX_DIR/.config
@@ -165,12 +173,9 @@ int main(void) {
 
   // load isofs
   system("/sbin/modprobe binfmt_script");
-  system("/sbin/modprobe isofs");
 
   // call original init
-  char* argv[] = { "/sbin/init", NULL };
-  rc = execv(argv[0], argv);
-  printf("Execc returned %i\n", rc);
+  execl("/sbin/init", "/sbin/init", (char*) NULL);
 }
 EOF
 
@@ -186,8 +191,7 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-# combined targets "clean all" fail :-(
-#make -C $LINUX_DIR -j$(nproc) clean 
+#make -C $LINUX_DIR -j$(nproc) clean all
 make -C $LINUX_DIR -j$(nproc) all
 
 # clean up INITRD_DIR after build
@@ -206,6 +210,9 @@ make -C $LINUX_DIR modules_install
 mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g 
 rm -R $INSTALL_MOD_PATH
 
+#prepare output file
+truncate -s 512m $RESULT_FILE
+
 #root=/dev/ubda1 
-$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
+$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
 
