@@ -80,15 +80,14 @@ sed -i 's/CONFIG_UML_NET_PCAP=y/CONFIG_UML_NET_PCAP=n/' $LINUX_DIR/.config
 # link dynamic
 sed -i 's/CONFIG_STATIC_LINK=y/CONFIG_STATIC_LINK=n/' $LINUX_DIR/.config
 
-# either GCOV or KCOV,KCOV_KERNEL, both doesn't seem to work
+# FIXME: it's either GCOV or GCOV_KERNEL
 sed -i 's/CONFIG_GCOV_KERNEL=y/CONFIG_GCOV_KERNEL=n/' $LINUX_DIR/.config
-sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
 
 # gcov fails the module build with errors like those:
 #ERROR: "__gcov_merge_add" [arch/um/drivers/harddog.ko] undefined!
 #ERROR: "__gcov_init" [arch/um/drivers/harddog.ko] undefined!
 #ERROR: "__gcov_exit" [arch/um/drivers/harddog.ko] undefined!
-sed -i 's/CONFIG_GCOV=y/CONFIG_GCOV=n/' $LINUX_DIR/.config
+#sed -i 's/CONFIG_GCOV=y/CONFIG_GCOV=n/' $LINUX_DIR/.config
 # dont break the build here
 #export KBUILD_MODPOST_WARN=y
 
@@ -191,8 +190,7 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-#make -C $LINUX_DIR -j$(nproc) clean all
-make -C $LINUX_DIR -j$(nproc) all
+make -C $LINUX_DIR -j$(nproc) clean all
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
