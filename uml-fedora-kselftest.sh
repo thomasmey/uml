@@ -69,9 +69,6 @@ fi
 # crete config
 make -C $LINUX_DIR allmodconfig
 
-# be less verbose
-#sed -i 's/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=y/CONFIG_GCC_PLUGIN_CYC_COMPLEXITY=n/' $LINUX_DIR/.config
-
 # Fedora doesn't have this package available
 sed -i 's/CONFIG_UML_NET_VDE=y/CONFIG_UML_NET_VDE=n/' $LINUX_DIR/.config
 # pcap is broken
@@ -82,14 +79,6 @@ sed -i 's/CONFIG_STATIC_LINK=y/CONFIG_STATIC_LINK=n/' $LINUX_DIR/.config
 
 # FIXME: it's either GCOV or GCOV_KERNEL
 sed -i 's/CONFIG_GCOV_KERNEL=y/CONFIG_GCOV_KERNEL=n/' $LINUX_DIR/.config
-
-# gcov fails the module build with errors like those:
-#ERROR: "__gcov_merge_add" [arch/um/drivers/harddog.ko] undefined!
-#ERROR: "__gcov_init" [arch/um/drivers/harddog.ko] undefined!
-#ERROR: "__gcov_exit" [arch/um/drivers/harddog.ko] undefined!
-#sed -i 's/CONFIG_GCOV=y/CONFIG_GCOV=n/' $LINUX_DIR/.config
-# dont break the build here
-#export KBUILD_MODPOST_WARN=y
 
 # this fails
 sed -i 's/CONFIG_OF_UNITTEST=y/CONFIG_OF_UNITTEST=n/' $LINUX_DIR/.config
@@ -102,10 +91,6 @@ sed -i 's/CONFIG_EXT4_FS=./CONFIG_EXT4_FS=y/' $LINUX_DIR/.config
 
 # don't sign modules
 sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/' $LINUX_DIR/.config
-
-# patch send upstream
-# this modules has unsatisfed dependencies:
-#sed -i 's/CONFIG_IMG_ASCII_LCD=m/CONFIG_IMG_ASCII_LCD=n/' $LINUX_DIR/.config
 
 # disable RODATA for now 
 sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $LINUX_DIR/.config
@@ -120,6 +105,9 @@ sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=18/" $LINUX_DIR/.config
 
 # ?? don't know
 echo "CONFIG_BIG_KEYS=y" >> $LINUX_DIR/.config
+
+# disable KCOV
+sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
 
 # mount --bind modules over root
 cc -o $INITRD_DIR/init -static -xc - << EOF
@@ -170,7 +158,8 @@ int main(void) {
   // establish stdin,stdout,stderr
   setup_stdio();
 
-  // load isofs
+  // load extra modules for allmodconfig 
+  system("/sbin/modprobe isofs");
   system("/sbin/modprobe binfmt_script");
 
   // call original init
@@ -190,7 +179,7 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) clean all
+make -C $LINUX_DIR -j$(nproc) all
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
