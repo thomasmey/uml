@@ -1,5 +1,15 @@
 #!/bin/sh -e
 
+# This scripts needs those packages:
+# - curl
+# - genisoimage
+# - glibc-static
+# - gcc/g++
+# - gcc-plugin-dev
+# - clang
+# - libssl-dev
+# - e2fsprogs
+
 export ARCH=um
 # x86_64 or i386
 export SUBARCH=x86_64
@@ -15,7 +25,7 @@ RESULT_FILE=Fedora-Cloud-Base-Result.img
 
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
-  git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git $LINUX_DIR
+  git clone https://github.com/thomasmey/linux.git $LINUX_DIR
 fi
 
 if [ ! -f "$RAW_FILE" ]; then
@@ -66,7 +76,7 @@ EOF
   rm -R $TEMP_DIR
 fi
 
-# crete config
+# create config
 make -C $LINUX_DIR allmodconfig
 
 # Fedora doesn't have this package available
@@ -108,6 +118,9 @@ echo "CONFIG_BIG_KEYS=y" >> $LINUX_DIR/.config
 
 # disable KCOV
 sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
+
+# host systems kmod may lack gzip support, so don't compress modules
+sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $LINUX_DIR/.config
 
 # mount --bind modules over root
 cc -o $INITRD_DIR/init -static -xc - << EOF
@@ -179,22 +192,25 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) all
+make -C $LINUX_DIR -j$(nproc) all 2> kernel-build-stderr.txt
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
+
+# extract "cyclomatic complexitiy"
+grep "Cyclomatic Compl" kernel-build-stderr.txt  | sort -k 3nr > cyc-comp.txt 
 
 # build and install kselftests
 # used by kselftest install
 export INSTALL_PATH=`mktemp -d`
 make -C $LINUX_DIR/tools/testing/selftests all install
-mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
+/sbin/mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
 rm -R $INSTALL_PATH
 
 # build and install modules 
 export INSTALL_MOD_PATH=`mktemp -d`
 make -C $LINUX_DIR modules_install 
-mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g 
+/sbin/mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g 
 rm -R $INSTALL_MOD_PATH
 
 #prepare output file
