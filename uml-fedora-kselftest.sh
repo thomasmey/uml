@@ -23,6 +23,8 @@ MODULES_FILE=Fedora-Cloud-Base-modules.img
 INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
+export KBUILD_OUTPUT=`mktemp -d`
+
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
   git clone https://github.com/thomasmey/linux.git $LINUX_DIR
@@ -80,47 +82,47 @@ fi
 make -C $LINUX_DIR allmodconfig
 
 # Fedora doesn't have this package available
-sed -i 's/CONFIG_UML_NET_VDE=y/CONFIG_UML_NET_VDE=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_UML_NET_VDE=y/CONFIG_UML_NET_VDE=n/' $KBUILD_OUTPUT/.config
 # pcap is broken
-sed -i 's/CONFIG_UML_NET_PCAP=y/CONFIG_UML_NET_PCAP=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_UML_NET_PCAP=y/CONFIG_UML_NET_PCAP=n/' $KBUILD_OUTPUT/.config
 
 # link dynamic
-sed -i 's/CONFIG_STATIC_LINK=y/CONFIG_STATIC_LINK=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_STATIC_LINK=y/CONFIG_STATIC_LINK=n/' $KBUILD_OUTPUT/.config
 
 # FIXME: it's either GCOV or GCOV_KERNEL
-sed -i 's/CONFIG_GCOV_KERNEL=y/CONFIG_GCOV_KERNEL=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_GCOV_KERNEL=y/CONFIG_GCOV_KERNEL=n/' $KBUILD_OUTPUT/.config
 
 # this fails
-sed -i 's/CONFIG_OF_UNITTEST=y/CONFIG_OF_UNITTEST=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_OF_UNITTEST=y/CONFIG_OF_UNITTEST=n/' $KBUILD_OUTPUT/.config
 
 # increase stack size
-sed -i 's/CONFIG_KERNEL_STACK_ORDER=./CONFIG_KERNEL_STACK_ORDER=3/' $LINUX_DIR/.config
+sed -i 's/CONFIG_KERNEL_STACK_ORDER=./CONFIG_KERNEL_STACK_ORDER=3/' $KBUILD_OUTPUT/.config
 
 # we need ext4
-sed -i 's/CONFIG_EXT4_FS=./CONFIG_EXT4_FS=y/' $LINUX_DIR/.config
+sed -i 's/CONFIG_EXT4_FS=./CONFIG_EXT4_FS=y/' $KBUILD_OUTPUT/.config
 
 # don't sign modules
-sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/' $KBUILD_OUTPUT/.config
 
 # disable RODATA for now 
-sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $KBUILD_OUTPUT/.config
 
 # prepare init ram disk
-sed -i "s@CONFIG_INITRAMFS_SOURCE=\"\"@CONFIG_INITRAMFS_SOURCE=\"$INITRD_DIR/files\"@" $LINUX_DIR/.config
-echo "CONFIG_INITRAMFS_ROOT_UID=-1" >> $LINUX_DIR/.config
-echo "CONFIG_INITRAMFS_ROOT_GID=-1" >> $LINUX_DIR/.config
+sed -i "s@CONFIG_INITRAMFS_SOURCE=\"\"@CONFIG_INITRAMFS_SOURCE=\"$INITRD_DIR/files\"@" $KBUILD_OUTPUT/.config
+echo "CONFIG_INITRAMFS_ROOT_UID=-1" >> $KBUILD_OUTPUT/.config
+echo "CONFIG_INITRAMFS_ROOT_GID=-1" >> $KBUILD_OUTPUT/.config
 
 # increase kernel message log buffer size
-sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=18/" $LINUX_DIR/.config
+sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=18/" $KBUILD_OUTPUT/.config
 
 # ?? don't know
-echo "CONFIG_BIG_KEYS=y" >> $LINUX_DIR/.config
+echo "CONFIG_BIG_KEYS=y" >> $KBUILD_OUTPUT/.config
 
 # disable KCOV
-sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $KBUILD_OUTPUT/.config
 
 # host systems kmod may lack gzip support, so don't compress modules
-sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $LINUX_DIR/.config
+sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $KBUILD_OUTPUT/.config
 
 # mount --bind modules over root
 cc -o $INITRD_DIR/init -static -xc - << EOF
@@ -217,5 +219,7 @@ rm -R $INSTALL_MOD_PATH
 truncate -s 512m $RESULT_FILE
 
 #root=/dev/ubda1 
-$LINUX_DIR/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
+$KBUILD_OUTPUT/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
+
+rm -R $KBUILD_OUTPUT
 
