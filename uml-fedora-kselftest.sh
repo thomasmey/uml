@@ -9,6 +9,14 @@
 # - clang
 # - libssl-dev
 # - e2fsprogs
+# - libelf-dev
+# - libcap-dev
+# - libcap-ng-dev
+# - libfuse-dev
+# - libc6-dev
+# - libnuma-dev
+# - libpopt-dev
+# - pkg-config
 
 export ARCH=um
 # x86_64 or i386
@@ -24,21 +32,24 @@ INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
 export KBUILD_OUTPUT=`mktemp -d`
+#export KBUILD_OUTPUT=/tmp/tmp.yWDJUhwH0z
 
+# clone source repo
 if [ ! -d "$LINUX_DIR" ]; then
   mkdir -p $LINUX_DIR
   git clone https://github.com/thomasmey/linux.git $LINUX_DIR
 fi
 
+# download iso image
 if [ ! -f "$RAW_FILE" ]; then
   curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/26/CloudImages/x86_64/images/$RAW_FILE.xz"
   unxz $RAW_FILE.xz
 fi
 
-if [ ! -f "$CLOUD_INIT_FILE" ]; then
-  TEMP_DIR=`mktemp -d`
-  { echo instance-id: iid-local01; echo local-hostname: cloudimg; } > $TEMP_DIR/meta-data
-  cat > $TEMP_DIR/user-data << EOF
+# create cloud-init image
+TEMP_DIR=`mktemp -d`
+{ echo instance-id: iid-local01; echo local-hostname: cloudimg; } > $TEMP_DIR/meta-data
+cat > $TEMP_DIR/user-data << EOF
 #cloud-config
 password: passw0rd
 chpasswd: { expire: False }
@@ -72,11 +83,8 @@ runcmd:
   - [ systemctl, start, --no-block, kselftest.service ]
 
 EOF
-
-  ## create a disk to attach with some user-data and meta-data
-  genisoimage -output $CLOUD_INIT_FILE -volid cidata -joliet -rock $TEMP_DIR
-  rm -R $TEMP_DIR
-fi
+genisoimage -output $CLOUD_INIT_FILE -volid cidata -joliet -rock $TEMP_DIR
+rm -R $TEMP_DIR
 
 # create config
 make -C $LINUX_DIR allmodconfig
@@ -124,7 +132,7 @@ sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $KBUILD_OUTPUT/.config
 # host systems kmod may lack gzip support, so don't compress modules
 sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $KBUILD_OUTPUT/.config
 
-# mount --bind modules over root
+# create init helper (mount --bind modules over root)
 cc -o $INITRD_DIR/init -static -xc - << EOF
 #define _GNU_SOURCE         /* See feature_test_macros(7) */
 #include <unistd.h>
@@ -182,7 +190,7 @@ int main(void) {
 }
 EOF
 
-# create initrd that mount --bind /dev/ubdd over /dev/ubda1
+# create initrd 
 cat > $INITRD_DIR/files << EOF
 dir /dev         0755 0 0
 nod /dev/console 0600 0 0 c 5 1
@@ -199,7 +207,7 @@ make -C $LINUX_DIR -j$(nproc) all 2> kernel-build-stderr.txt
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
 
-# extract "cyclomatic complexitiy"
+# extract "cyclomatic complexity"
 grep "Cyclomatic Compl" kernel-build-stderr.txt  | sort -k 3nr > cyc-comp.txt 
 
 # build and install kselftests
@@ -221,5 +229,5 @@ truncate -s 512m $RESULT_FILE
 #root=/dev/ubda1 
 $KBUILD_OUTPUT/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
 
-rm -R $KBUILD_OUTPUT
+#rm -R $KBUILD_OUTPUT
 
