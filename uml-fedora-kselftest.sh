@@ -17,6 +17,7 @@
 # - libnuma-dev
 # - libpopt-dev
 # - pkg-config
+# - (jq)
 
 export ARCH=um
 # x86_64 or i386
@@ -32,7 +33,7 @@ INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
 export KBUILD_OUTPUT=`mktemp -d`
-#export KBUILD_OUTPUT=/tmp/tmp.yWDJUhwH0z
+#export KBUILD_OUTPUT=/tmp/tmp.B8oU1qIqYe/
 
 # clone source repo
 if [ ! -d "$LINUX_DIR" ]; then
@@ -231,3 +232,5 @@ $KBUILD_OUTPUT/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1
 
 #rm -R $KBUILD_OUTPUT
 
+# Extract output from this run
+# jq -r 'select(._SYSTEMD_UNIT == "kselftest.service") | .MESSAGE' $RESULT_FILE |less
