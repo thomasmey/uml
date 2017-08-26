@@ -17,7 +17,9 @@
 # - libnuma-dev
 # - libpopt-dev
 # - pkg-config
+# - slirp
 # - (jq)
+# - (uml-utilities)
 
 export ARCH=um
 # x86_64 or i386
@@ -49,7 +51,19 @@ fi
 
 # create cloud-init image
 TEMP_DIR=`mktemp -d`
-{ echo instance-id: iid-local01; echo local-hostname: cloudimg; } > $TEMP_DIR/meta-data
+cat > $TEMP_DIR/meta-data << EOF
+instance-id: iid-local01
+local-hostname: cloudimg
+network-interfaces: |
+  iface eth0 inet static
+  address 10.0.2.15
+  network 10.0.2.0
+  netmask 255.255.255.0
+  broadcast 10.0.2.255
+  gateway 10.0.2.2 
+hostname: cloudimg 
+EOF
+
 cat > $TEMP_DIR/user-data << EOF
 #cloud-config
 password: passw0rd
@@ -68,20 +82,37 @@ write_files:
      [Service]
      Type=simple
      ExecStart=/bin/sh /opt/run_kselftest.sh
-     ExecPostStop=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
-     ExecPostStop=/usr/bin/systemctl halt
+     ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
+     ExecStopPost=/usr/bin/systemctl halt
      TimeoutSec=0
      RemainAfterExit=yes
      GuessMainPID=no
      WorkingDirectory=/opt/
      StandardOutput=journal+console
-   path: /etc/systemd/system/kselftest.service
-   permissions: '0755'
+   path: /etc/systemd/system/kselftests.service
+   permissions: '0644'
+ - content: |
+     isofs
+     fuse
+   path: /etc/modules-load.d/kselftest-modules.conf
+   permissions: '0644'
+
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAGEA3FSyQwBI6Z+nCSjUUk8EEAnnkhXlukKoUPND/RRClWz2s5TCzIkd3Ou5+Cyz71X0XmazM3l5WgeErvtIwQMyT1KjNoMhoJMrJnWqQPOt5Q8zWd9qG7PBl9+eiH5qV7NZ mykey@host
 
 runcmd:
   - [ systemctl, daemon-reload ]
-  - [ systemctl, enable, kselftest.service ]
-  - [ systemctl, start, --no-block, kselftest.service ]
+  - [ systemctl, enable, kselftests.service ]
+  - [ systemctl, start, --no-block, kselftests.service ]
+
+packages:
+ - bc
+ - perl
+
+manage_resolv_conf: true
+
+resolv_conf:
+  nameservers: ['10.0.2.3']
 
 EOF
 genisoimage -output $CLOUD_INIT_FILE -volid cidata -joliet -rock $TEMP_DIR
@@ -183,8 +214,8 @@ int main(void) {
   setup_stdio();
 
   // load extra modules for allmodconfig 
-  system("/sbin/modprobe isofs");
   system("/sbin/modprobe binfmt_script");
+  system("/sbin/modprobe isofs"); // sadly cloud-init runs too early to use modules-load.d service :-(
 
   // call original init
   execl("/sbin/init", "/sbin/init", (char*) NULL);
@@ -228,9 +259,9 @@ rm -R $INSTALL_MOD_PATH
 truncate -s 512m $RESULT_FILE
 
 #root=/dev/ubda1 
-$KBUILD_OUTPUT/linux mem=1280m umid=kselftests ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 loadpin.enabled=0 selinux=0
+$KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 selinux=0
 
-#rm -R $KBUILD_OUTPUT
+rm -R $KBUILD_OUTPUT
 
 # Extract output from this run
-# jq -r 'select(._SYSTEMD_UNIT == "kselftest.service") | .MESSAGE' $RESULT_FILE |less
+jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > kselftests-result.txt
