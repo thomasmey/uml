@@ -234,13 +234,13 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) all 2> kernel-build-stderr.txt
+make -C $LINUX_DIR -j$(nproc) all 2> result-kernel-build-stderr.txt
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
 
 # extract "cyclomatic complexity"
-grep "Cyclomatic Compl" kernel-build-stderr.txt  | sort -k 3nr > cyc-comp.txt 
+grep "Cyclomatic Compl" kernel-build-stderr.txt  | sort -k 3nr > result-cyc-comp.txt 
 
 # build and install kselftests
 # used by kselftest install
@@ -264,4 +264,6 @@ $KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_F
 rm -R $KBUILD_OUTPUT
 
 # Extract output from this run
-jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > kselftests-result.txt
+jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > result-kselftests.txt
+jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > result-kernel-log.txt
+
