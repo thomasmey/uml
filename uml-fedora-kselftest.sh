@@ -83,7 +83,7 @@ write_files:
      Type=simple
      ExecStart=/bin/sh /opt/run_kselftest.sh
      ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
-     ExecStopPost=/usr/bin/systemctl halt
+     ExecStopPost=/usr/bin/systemctl poweroff --no-block
      TimeoutSec=0
      RemainAfterExit=yes
      GuessMainPID=no
@@ -234,13 +234,13 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) all 2> result-kernel-build-stderr.txt
+make -C $LINUX_DIR -j$(nproc) all > result-kernel-build-stdout.txt 2> result-kernel-build-stderr.txt
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
 
 # extract "cyclomatic complexity"
-grep "Cyclomatic Compl" kernel-build-stderr.txt  | sort -k 3nr > result-cyc-comp.txt 
+grep "Cyclomatic Compl" result-kernel-build-stderr.txt  | sort -k 3nr > result-cyc-comp.txt 
 
 # build and install kselftests
 # used by kselftest install
