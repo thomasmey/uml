@@ -35,7 +35,7 @@ INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
 export KBUILD_OUTPUT=`mktemp -d`
-#export KBUILD_OUTPUT=/tmp/tmp.B8oU1qIqYe/
+#export KBUILD_OUTPUT=/tmp/tmp.eQEY9JUJbU
 
 # clone source repo
 if [ ! -d "$LINUX_DIR" ]; then
@@ -83,7 +83,7 @@ write_files:
      Type=simple
      ExecStart=/bin/sh /opt/run_kselftest.sh
      ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
-     ExecStopPost=/usr/bin/systemctl poweroff --no-block
+     ExecStopPost=/usr/bin/systemctl start poweroff.target --no-block --job-mode=replace-irreversibly
      TimeoutSec=0
      RemainAfterExit=yes
      GuessMainPID=no
@@ -147,13 +147,16 @@ sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/' $KBUILD_OUTPUT/.config
 # disable RODATA for now 
 sed -i 's/CONFIG_DEBUG_RODATA_TEST=y/CONFIG_DEBUG_RODATA_TEST=n/' $KBUILD_OUTPUT/.config
 
+# udev fails with this
+sed -i 's/CONFIG_SYSFS_DEPRECATED=y/CONFIG_SYSFS_DEPRECATED=n/' $KBUILD_OUTPUT/.config
+
 # prepare init ram disk
 sed -i "s@CONFIG_INITRAMFS_SOURCE=\"\"@CONFIG_INITRAMFS_SOURCE=\"$INITRD_DIR/files\"@" $KBUILD_OUTPUT/.config
 echo "CONFIG_INITRAMFS_ROOT_UID=-1" >> $KBUILD_OUTPUT/.config
 echo "CONFIG_INITRAMFS_ROOT_GID=-1" >> $KBUILD_OUTPUT/.config
 
 # increase kernel message log buffer size
-sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=18/" $KBUILD_OUTPUT/.config
+sed -i "s/CONFIG_LOG_BUF_SHIFT=\d+/CONFIG_LOG_BUF_SHIFT=19/" $KBUILD_OUTPUT/.config
 
 # ?? don't know
 echo "CONFIG_BIG_KEYS=y" >> $KBUILD_OUTPUT/.config
@@ -234,7 +237,7 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) all > result-kernel-build-stdout.txt 2> result-kernel-build-stderr.txt
+make -C $LINUX_DIR -j$(nproc) all 2> result-kernel-build-stderr.txt
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
