@@ -27,15 +27,14 @@ export SUBARCH=x86_64
 
 LINUX_DIR=~/git/linux
 
-RAW_FILE=Fedora-Cloud-Base-26-1.5.x86_64.raw
+RAW_FILE=Fedora-Cloud-Base-26-1.5.$SUBARCH.raw
 CLOUD_INIT_FILE=Fedora-Cloud-Base-Init.iso
 KSELFTEST_FILE=Fedora-Cloud-Base-kselftests.img
 MODULES_FILE=Fedora-Cloud-Base-modules.img
 INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
-export KBUILD_OUTPUT=`mktemp -d`
-#export KBUILD_OUTPUT=/tmp/tmp.eQEY9JUJbU
+export KBUILD_OUTPUT=/home/thomas/git/linux-um/
 
 # clone source repo
 if [ ! -d "$LINUX_DIR" ]; then
@@ -45,7 +44,7 @@ fi
 
 # download iso image
 if [ ! -f "$RAW_FILE" ]; then
-  curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/26/CloudImages/x86_64/images/$RAW_FILE.xz"
+  curl -OL "https://download.fedoraproject.org/pub/fedora/linux/releases/26/CloudImages/$SUBARCH/images/$RAW_FILE.xz"
   unxz $RAW_FILE.xz
 fi
 
@@ -83,10 +82,8 @@ write_files:
      Type=simple
      ExecStart=/bin/sh /opt/run_kselftest.sh
      ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
-     ExecStopPost=/usr/bin/systemctl start poweroff.target --no-block --job-mode=replace-irreversibly
-     TimeoutSec=0
-     RemainAfterExit=yes
-     GuessMainPID=no
+     ExecStopPost=/usr/bin/systemctl --no-block poweroff
+     TimeoutSec=1h 30min
      WorkingDirectory=/opt/
      StandardOutput=journal+console
    path: /etc/systemd/system/kselftests.service
@@ -263,8 +260,6 @@ truncate -s 512m $RESULT_FILE
 
 #root=/dev/ubda1 
 $KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 selinux=0
-
-rm -R $KBUILD_OUTPUT
 
 # Extract output from this run
 jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > result-kselftests.txt
