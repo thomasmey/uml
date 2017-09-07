@@ -83,7 +83,7 @@ write_files:
      ExecStart=/bin/sh /opt/run_kselftest.sh
      ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
      ExecStopPost=/usr/bin/systemctl --no-block poweroff
-     TimeoutSec=1h 30min
+     RuntimeMaxSec=2h 30min
      WorkingDirectory=/opt/
      StandardOutput=journal+console
    path: /etc/systemd/system/kselftests.service
@@ -217,8 +217,7 @@ int main(void) {
   system("/sbin/modprobe binfmt_script");
   system("/sbin/modprobe isofs"); // sadly cloud-init runs too early to use modules-load.d service :-(
 
-  // call original init
-  execl("/sbin/init", "/sbin/init", (char*) NULL);
+  return 0;
 }
 EOF
 
@@ -259,7 +258,7 @@ rm -R $INSTALL_MOD_PATH
 truncate -s 512m $RESULT_FILE
 
 #root=/dev/ubda1 
-$KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 selinux=0
+$KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 root=/dev/ubda1
 
 # Extract output from this run
 jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > result-kselftests.txt
