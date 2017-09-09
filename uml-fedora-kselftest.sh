@@ -83,7 +83,7 @@ write_files:
      ExecStart=/bin/sh /opt/run_kselftest.sh
      ExecStopPost=/bin/sh -c "/bin/journalctl -b -o json --no-pager > /dev/ubde"
      ExecStopPost=/usr/bin/systemctl --no-block poweroff
-     RuntimeMaxSec=2h 30min
+     RuntimeMaxSec=3h
      WorkingDirectory=/opt/
      StandardOutput=journal+console
    path: /etc/systemd/system/kselftests.service
@@ -163,6 +163,10 @@ sed -i 's/CONFIG_KCOV=y/CONFIG_KCOV=n/' $KBUILD_OUTPUT/.config
 
 # host systems kmod may lack gzip support, so don't compress modules
 sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $KBUILD_OUTPUT/.config
+
+# disable CONFIG_MODVERSIONS, because it generates temporary object files (see scripts/Makefile.build, cmd_modversions_c)
+# which results in .tmp*.gcno/gcda files for GCOV :-(
+#sed -i 's/CONFIG_MODVERSIONS=y/CONFIG_MODVERSIONS=n/' $KBUILD_OUTPUT/.config
 
 # create init helper (mount --bind modules over root)
 cc -o $INITRD_DIR/init -static -xc - << EOF
@@ -265,4 +269,8 @@ $KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_F
 # Extract output from this run
 jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > result-kselftests.txt
 jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > result-kernel-log.txt
+
+# Extract code coverage
+lcov --capture --directory $KBUILD_OUTPUT --output-file coverage.info
+genhtml coverage.info --output-directory out
 
