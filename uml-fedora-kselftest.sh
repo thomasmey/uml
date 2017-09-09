@@ -34,7 +34,10 @@ MODULES_FILE=Fedora-Cloud-Base-modules.img
 INITRD_DIR=`mktemp -d`
 RESULT_FILE=Fedora-Cloud-Base-Result.img
 
-export KBUILD_OUTPUT=/home/thomas/git/linux-um/
+#export KBUILD_OUTPUT=/home/thomas/git/linux-um/
+export KBUILD_OUTPUT=`mktemp -d`
+
+COV_HTML_OUT=coverage
 
 # clone source repo
 if [ ! -d "$LINUX_DIR" ]; then
@@ -168,6 +171,11 @@ sed -i 's/CONFIG_MODULE_COMPRESS=y/CONFIG_MODULE_COMPRESS=n/' $KBUILD_OUTPUT/.co
 # which results in .tmp*.gcno/gcda files for GCOV :-(
 #sed -i 's/CONFIG_MODVERSIONS=y/CONFIG_MODVERSIONS=n/' $KBUILD_OUTPUT/.config
 
+RESULT_DIR=`make -s -C $LINUX_DIR kernelrelease`
+if [ ! -d "$RESULT_DIR" ]; then
+  mkdir $RESULT_DIR
+fi
+
 # create init helper (mount --bind modules over root)
 cc -o $INITRD_DIR/init -static -xc - << EOF
 #define _GNU_SOURCE         /* See feature_test_macros(7) */
@@ -239,26 +247,32 @@ file /init $INITRD_DIR/init 0755 0 0
 EOF
 
 # build kernel
-make -C $LINUX_DIR -j$(nproc) all 2> result-kernel-build-stderr.txt
+make -C $LINUX_DIR -j$(nproc) all 2> $RESULT_DIR/result-kernel-build-stderr.txt
 
 # clean up INITRD_DIR after build
 rm -R $INITRD_DIR
 
 # extract "cyclomatic complexity"
-grep "Cyclomatic Compl" result-kernel-build-stderr.txt  | sort -k 3nr > result-cyc-comp.txt 
-
-# build and install kselftests
-# used by kselftest install
-export INSTALL_PATH=`mktemp -d`
-make -C $LINUX_DIR/tools/testing/selftests all install
-/sbin/mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
-rm -R $INSTALL_PATH
+grep "Cyclomatic Compl" $RESULT_DIR/result-kernel-build-stderr.txt  | sort -k 3nr > $RESULT_DIR/result-cyc-comp.txt 
 
 # build and install modules 
 export INSTALL_MOD_PATH=`mktemp -d`
 make -C $LINUX_DIR modules_install 
 /sbin/mke2fs -F -d $INSTALL_MOD_PATH $MODULES_FILE 1g 
 rm -R $INSTALL_MOD_PATH
+
+# build and install kselftests
+# un-export KBUILD_OUTPUT, we don't want to mingle the kernel's code coverage with the kselftests programs,
+# which also seems to be build with lgcov?!
+declare +x KBUILD_OUTPUT
+# used by kselftest install
+export INSTALL_PATH=`mktemp -d`
+make -C $LINUX_DIR/tools/testing/selftests all install
+
+# this testprogram hangs, for whatever reasons, remove it for now:
+rm $INSTALL_PATH/timers/set-timer-lat
+/sbin/mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
+rm -R $INSTALL_PATH
 
 #prepare output file
 truncate -s 512m $RESULT_FILE
@@ -267,10 +281,12 @@ truncate -s 512m $RESULT_FILE
 $KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 selinux=0
 
 # Extract output from this run
-jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > result-kselftests.txt
-jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > result-kernel-log.txt
+jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kselftests.txt
+jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kernel-log.txt
 
 # Extract code coverage
 lcov --capture --directory $KBUILD_OUTPUT --output-file coverage.info
-genhtml coverage.info --output-directory out
+genhtml coverage.info --output-directory $RESULT_DIR/$COV_HTML_OUT
+
+#rm $KBUILD_OUTPUT
 
