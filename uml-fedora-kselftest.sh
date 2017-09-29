@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 # This scripts needs those packages:
 # - curl
@@ -270,7 +270,7 @@ export INSTALL_PATH=`mktemp -d`
 make -C $LINUX_DIR/tools/testing/selftests all install
 
 # this testprogram hangs, for whatever reasons, remove it for now:
-rm $INSTALL_PATH/timers/set-timer-lat
+#rm $INSTALL_PATH/timers/set-timer-lat
 /sbin/mke2fs -F -d $INSTALL_PATH $KSELFTEST_FILE 512m
 rm -R $INSTALL_PATH
 
@@ -280,13 +280,13 @@ truncate -s 512m $RESULT_FILE
 #root=/dev/ubda1 
 $KBUILD_OUTPUT/linux mem=1280m umid=kselftests-$RANDOM ubd0=$RAW_FILE.cow,$RAW_FILE ubd1=$CLOUD_INIT_FILE ubd2=$KSELFTEST_FILE ubd3=$MODULES_FILE ubd4=$RESULT_FILE ro rhgb quiet LANG=de_DE.UTF-8 plymouth.enable=0 con=pts con0=fd:0,fd:1 eth0=slirp, loadpin.enabled=0 selinux=0
 
-# Extract output from this run
-jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kselftests.txt
-jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kernel-log.txt
-
 # Extract code coverage
 lcov --capture --directory $KBUILD_OUTPUT --output-file coverage.info
 genhtml coverage.info --output-directory $RESULT_DIR/$COV_HTML_OUT
+
+# Extract output from this run
+jq -r 'select(._SYSTEMD_UNIT == "kselftests.service") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kselftests.txt
+jq -r 'select(.SYSLOG_FACILITY == "0") | .MESSAGE' $RESULT_FILE > $RESULT_DIR/result-kernel-log.txt
 
 #rm $KBUILD_OUTPUT
 
