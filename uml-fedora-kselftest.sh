@@ -275,6 +275,7 @@ make -C $LINUX_DIR/tools/testing/selftests all install
 rm -R $INSTALL_PATH
 
 #prepare output file
+rm $RESULT_FILE
 truncate -s 512m $RESULT_FILE
 
 #root=/dev/ubda1 
